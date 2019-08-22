@@ -34,4 +34,11 @@ public class OsxProcessFactory implements NuProcessFactory
       process.start(commands, env, cwd);
       return process;
    }
+
+   @Override
+   public void runProcess(List<String> commands, String[] env, NuProcessHandler processListener, Path cwd)
+   {
+      OsxProcess process = new OsxProcess(processListener);
+      process.run(commands, env, cwd);
+   }
 }

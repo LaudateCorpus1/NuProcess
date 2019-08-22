@@ -225,31 +225,7 @@ public final class WindowsProcess implements NuProcess
       callPreStart();
 
       try {
-         createPipes();
-
-         char[] block = getEnvironment(environment);
-         Memory env = new Memory(block.length * 3);
-         env.write(0, block, 0, block.length);
-
-         STARTUPINFO startupInfo = new STARTUPINFO();
-         startupInfo.clear();
-         startupInfo.cb = new DWORD(startupInfo.size());
-         startupInfo.hStdInput = hStdinWidow;
-         startupInfo.hStdError = hStderrWidow;
-         startupInfo.hStdOutput = hStdoutWidow;
-         startupInfo.dwFlags = NuWinNT.STARTF_USESTDHANDLES;
-
-         processInfo = new PROCESS_INFORMATION();
-
-         DWORD dwCreationFlags = new DWORD(NuWinNT.CREATE_NO_WINDOW | NuWinNT.CREATE_UNICODE_ENVIRONMENT | NuWinNT.CREATE_SUSPENDED);
-         char[] cwdChars = (cwd != null) ? Native.toCharArray(cwd.toAbsolutePath().toString()) : null;
-         if (!NuKernel32.CreateProcessW(null, getCommandLine(commands), null /*lpProcessAttributes*/, null /*lpThreadAttributes*/, true /*bInheritHandles*/,
-                                        dwCreationFlags, env, cwdChars, startupInfo, processInfo)) {
-            int lastError = Native.getLastError();
-            throw new RuntimeException("CreateProcessW() failed, error: " + lastError);
-         }
-
-         afterStart();
+         prepareProcess(commands, environment, cwd);
 
          registerProcess();
 
@@ -268,6 +244,61 @@ public final class WindowsProcess implements NuProcess
       }
 
       return this;
+   }
+
+   void run(List<String> commands, String[] environment, Path cwd)
+   {
+      callPreStart();
+
+      try {
+         prepareProcess(commands, environment, cwd);
+
+         myProcessor = new ProcessCompletions(this);
+
+         callStart();
+
+         NuKernel32.ResumeThread(processInfo.hThread);
+
+         myProcessor.run();
+      }
+      catch (Throwable e) {
+         e.printStackTrace();
+         onExit(Integer.MIN_VALUE);
+      }
+      finally {
+         NuKernel32.CloseHandle(hStdinWidow);
+         NuKernel32.CloseHandle(hStdoutWidow);
+         NuKernel32.CloseHandle(hStderrWidow);
+      }
+   }
+
+   private void prepareProcess(List<String> commands, String[] environment, Path cwd)
+   {
+      createPipes();
+
+      char[] block = getEnvironment(environment);
+      Memory env = new Memory(block.length * 3);
+      env.write(0, block, 0, block.length);
+
+      STARTUPINFO startupInfo = new STARTUPINFO();
+      startupInfo.clear();
+      startupInfo.cb = new DWORD(startupInfo.size());
+      startupInfo.hStdInput = hStdinWidow;
+      startupInfo.hStdError = hStderrWidow;
+      startupInfo.hStdOutput = hStdoutWidow;
+      startupInfo.dwFlags = NuWinNT.STARTF_USESTDHANDLES;
+
+      processInfo = new PROCESS_INFORMATION();
+
+      DWORD dwCreationFlags = new DWORD(NuWinNT.CREATE_NO_WINDOW | NuWinNT.CREATE_UNICODE_ENVIRONMENT | NuWinNT.CREATE_SUSPENDED);
+      char[] cwdChars = (cwd != null) ? Native.toCharArray(cwd.toAbsolutePath().toString()) : null;
+      if (!NuKernel32.CreateProcessW(null, getCommandLine(commands), null /*lpProcessAttributes*/, null /*lpThreadAttributes*/, true /*bInheritHandles*/,
+              dwCreationFlags, env, cwdChars, startupInfo, processInfo)) {
+         int lastError = Native.getLastError();
+         throw new RuntimeException("CreateProcessW() failed, error: " + lastError);
+      }
+
+      afterStart();
    }
 
    HANDLE getPidHandle()
