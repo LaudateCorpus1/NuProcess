@@ -42,4 +42,11 @@ public class WinProcessFactory implements NuProcessFactory
       process.start(commands, env, cwd);
       return process;
    }
+
+   @Override
+   public void runProcess(List<String> commands, String[] env, NuProcessHandler processListener, Path cwd)
+   {
+      WindowsProcess process = new WindowsProcess(processListener);
+      process.run(commands, env, cwd);
+   }
 }

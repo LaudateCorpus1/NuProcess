@@ -66,12 +66,16 @@ public abstract class BaseEventProcessor<T extends BasePosixProcess> implements 
 
    /**
     * The primary run loop of the event processor.
+    *
+    * @since 1.3
     */
    @Override
    public void run()
    {
       try {
-         startBarrier.await();
+         if (startBarrier != null) {
+            startBarrier.await();
+         }
 
          int idleCount = 0;
          while (!isRunning.compareAndSet(idleCount > lingerIterations && pidToProcessMap.isEmpty(), false)) {

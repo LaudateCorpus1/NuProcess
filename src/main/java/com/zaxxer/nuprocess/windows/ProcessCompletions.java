@@ -82,6 +82,17 @@ public final class ProcessCompletions implements Runnable
       initCompletionPort();
    }
 
+   ProcessCompletions(WindowsProcess process)
+   {
+      this();
+
+      if (process == null) {
+         throw new IllegalArgumentException("process");
+      }
+
+      registerProcess(process);
+   }
+
    /**
     * The primary run loop of the kqueue event processor.
     */
@@ -89,7 +100,9 @@ public final class ProcessCompletions implements Runnable
    public void run()
    {
       try {
-         startBarrier.await();
+         if (startBarrier != null) {
+            startBarrier.await();
+         }
 
          int idleCount = 0;
          while (!isRunning.compareAndSet(idleCount > LINGER_ITERATIONS && deadPool.isEmpty() && completionKeyToProcessMap.isEmpty(), false)) {

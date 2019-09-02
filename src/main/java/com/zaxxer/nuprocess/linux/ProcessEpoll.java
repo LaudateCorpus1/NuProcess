@@ -56,6 +56,21 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
 
    ProcessEpoll()
    {
+      this(LINGER_ITERATIONS);
+   }
+
+   ProcessEpoll(LinuxProcess process)
+   {
+      this(-1);
+
+      registerProcess(process);
+      checkAndSetRunning();
+   }
+
+   private ProcessEpoll(int lingerIterations)
+   {
+      super(lingerIterations);
+
       epoll = LibEpoll.epoll_create(1024);
       if (epoll < 0) {
          throw new RuntimeException("Unable to create kqueue: " + Native.getLastError());

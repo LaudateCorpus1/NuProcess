@@ -92,6 +92,24 @@ public class CatTest
    }
 
    @Test
+   public void runProcessSynchronously()
+   {
+      System.err.println("Starting test runProcessSynchronously()");
+      for (int times = 0; times < 20; times++) {
+         System.err.printf(" Iteration %d\n", times + 1);
+
+         LottaProcessListener listener = new LottaProcessListener();
+         NuProcessBuilder pb = new NuProcessBuilder(listener, command);
+         pb.run();
+
+         Assert.assertTrue("Adler32 mismatch between written and read", listener.checkAdlers());
+         Assert.assertEquals("Exit code mismatch", 0, listener.getExitCode());
+      }
+
+      System.err.println("Completed test runProcessSynchronously()");
+   }
+
+   @Test
    public void lotOfData() throws Exception
    {
       System.err.println("Starting test lotOfData()");
@@ -337,6 +355,11 @@ public class CatTest
          bytes = getLotsOfBytes();
       }
 
+      LottaProcessListener()
+      {
+         this(null);
+      }
+
       @Override
       public void onStart(NuProcess nuProcess)
       {
@@ -348,7 +371,9 @@ public class CatTest
       public void onExit(int statusCode)
       {
          exitCode = statusCode;
-         semaphore.release();
+         if (semaphore != null) {
+            semaphore.release();
+         }
       }
 
       @Override
