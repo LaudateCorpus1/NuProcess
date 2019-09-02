@@ -2,15 +2,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>com.atlassian.pom</groupId>
-        <artifactId>public-pom</artifactId>
-        <version>5.0.26</version>
-    </parent>
-
     <groupId>com.zaxxer</groupId>
     <artifactId>nuprocess</artifactId>
-    <version>1.3-atlassian-1-SNAPSHOT</version>
+    <version>1.5-atlassian-5-SNAPSHOT</version>
     <packaging>bundle</packaging>
 
     <name>NuProcess-Atlassian</name>
@@ -23,10 +17,22 @@
     </organization>
 
     <scm>
-        <connection>scm:git:git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</connection>
-        <developerConnection>scm:git:git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</developerConnection>
-        <url>git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</url>
+        <connection>scm:git:ssh://git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</connection>
+        <developerConnection>scm:git:ssh://git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</developerConnection>
+        <url>ssh://git@stash.dev.internal.atlassian.com:7999/stash/nuprocess.git</url>
+        <tag>HEAD</tag>
     </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>atlassian-3rdparty</id>
+            <url>https://packages.atlassian.com/maven/3rdparty</url>
+        </repository>
+        <snapshotRepository>
+            <id>atlassian-3rdparty-snapshot</id>
+            <url>https://packages.atlassian.com/maven/3rdparty-snapshot</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <licenses>
         <license>
@@ -89,47 +95,45 @@
                     <target>1.7</target>
                 </configuration>
             </plugin>
-           <!-- Note: we might need this for removing side-effect on InterruptTest
-           <plugin>
-               <groupId>org.apache.maven.plugins</groupId>
-               <artifactId>maven-surefire-plugin</artifactId>
-               <version>2.18.1</version>
-               <configuration>
-                   <reuseForks>false</reuseForks>
-               </configuration>
-           </plugin>
-           -->
-           <plugin>
-               <groupId>org.apache.felix</groupId>
-               <artifactId>maven-bundle-plugin</artifactId>
-               <version>2.3.7</version>
-               <extensions>true</extensions>
-               <configuration>
-                   <instructions>
-                       <Bundle-Name>NuProcess</Bundle-Name>
-                       <Export-Package>
-							com.zaxxer.nuprocess;version="${project.version}", 
-							com.zaxxer.nuprocess.codec;version="${project.version}"
-					   </Export-Package>
-                       <Import-Package>com.sun.*</Import-Package>
-                       <Bundle-SymbolicName>${project.groupId}.${project.artifactId}</Bundle-SymbolicName>
-                   </instructions>
-               </configuration>
-           </plugin>
-           <plugin>
-               <groupId>org.apache.maven.plugins</groupId>
-               <artifactId>maven-source-plugin</artifactId>
-               <version>2.2.1</version>
-               <configuration>
-                   <!-- outputDirectory>/absolute/path/to/the/output/directory</outputDirectory> <finalName>filename-of-generated-jar-file</finalName -->
+            <!-- Note: we might need this for removing side-effect on InterruptTest
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.18.1</version>
+                <configuration>
+                    <reuseForks>false</reuseForks>
+                </configuration>
+            </plugin>
+            -->
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <version>2.3.7</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-Name>NuProcess</Bundle-Name>
+                        <Export-Package>
+                            com.zaxxer.nuprocess;version="${project.version}",
+                            com.zaxxer.nuprocess.codec;version="${project.version}"
+                        </Export-Package>
+                        <Import-Package>com.sun.*</Import-Package>
+                        <Bundle-SymbolicName>${project.groupId}.${project.artifactId}</Bundle-SymbolicName>
+                    </instructions>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.2.1</version>
+                <configuration>
+                    <!-- outputDirectory>/absolute/path/to/the/output/directory</outputDirectory> <finalName>filename-of-generated-jar-file</finalName -->
                     <attach>true</attach>
                 </configuration>
                 <executions>
                     <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
+                        <id>default</id>
+                        <phase>none</phase>
                     </execution>
                 </executions>
             </plugin>
@@ -147,9 +151,8 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
+                        <id>default</id>
+                        <phase>none</phase>
                     </execution>
                 </executions>
             </plugin>
