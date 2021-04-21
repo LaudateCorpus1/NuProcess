@@ -27,11 +27,8 @@ import com.sun.jna.ptr.IntByReference;
 import com.zaxxer.nuprocess.NuProcess;
 import com.zaxxer.nuprocess.internal.BaseEventProcessor;
 import com.zaxxer.nuprocess.internal.LibC;
-
-import static com.zaxxer.nuprocess.internal.LibC.WIFEXITED;
-import static com.zaxxer.nuprocess.internal.LibC.WEXITSTATUS;
-import static com.zaxxer.nuprocess.internal.LibC.WIFSIGNALED;
-import static com.zaxxer.nuprocess.internal.LibC.WTERMSIG;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Brett Wooldridge
@@ -39,15 +36,25 @@ import static com.zaxxer.nuprocess.internal.LibC.WTERMSIG;
 class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
 {
    private static final int EVENT_POOL_SIZE = 64;
+   private static final Logger LOGGER = LoggerFactory.getLogger(ProcessEpoll.class);
+   /* If set, after run() completes the processing loop for a synchronous process it will use an unbounded waitpid,
+    * rather than WNOHANG, to ensure the process is reaped. By default, WNOHANG is used in a backoff loop. */
+   private static final boolean RUN_UNBOUNDED_WAITPID =
+           Boolean.getBoolean("com.zaxxer.nuprocess.run.unboundedWaitpid");
    private static final BlockingQueue<EpollEvent> eventPool;
 
-   private int epoll;
-   private EpollEvent triggeredEvent;
-   private List<LinuxProcess> deadPool;
+   private final int epoll;
+   private final EpollEvent triggeredEvent;
+   private final List<LinuxProcess> deadPool;
+
    private LinuxProcess process;
 
    static
    {
+      if (RUN_UNBOUNDED_WAITPID) {
+         LOGGER.info("Using unbounded waitpid for synchronous processes");
+      }
+
       eventPool = new ArrayBlockingQueue<>(EVENT_POOL_SIZE);
       for (int i = 0; i < EVENT_POOL_SIZE; i++) {
          EpollEvent event = new EpollEvent();
@@ -187,10 +194,18 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
    {
       super.run();
 
-      if (process != null) {
+      if (!(process == null || deadPool.isEmpty())) {
          // For synchronous execution, wait until the deadpool is drained. This is necessary to ensure
          // the handler's onExit is called before LinuxProcess.run returns.
-         waitForDeadPool();
+         if (RUN_UNBOUNDED_WAITPID) {
+            // Use an _unbounded_ wait for the processes in the deadpool. This ensures the process is
+            // reaped, but at the potential cost of a misbehaving process "eating" a thread
+            waitForDeadPool();
+         }
+         else {
+            // Poll for the processes in the deadpool, using a backoff timer to prevent busy looping
+            pollForDeadPool();
+         }
       }
    }
 
@@ -286,7 +301,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
                linuxProcess.getStderr().release();
             }
          }
-         checkDeadPool();
+         checkDeadPool(true);
       }
    }
 
@@ -335,7 +350,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
       }
    }
 
-   private void checkDeadPool()
+   private void checkDeadPool(boolean noHang)
    {
       if (deadPool.isEmpty()) {
          return;
@@ -345,7 +360,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
       Iterator<LinuxProcess> iterator = deadPool.iterator();
       while (iterator.hasNext()) {
          LinuxProcess process = iterator.next();
-         int rc = LibC.waitpid(process.getPid(), ret, LibC.WNOHANG);
+         int rc = LibC.waitpid(process.getPid(), ret, noHang ? LibC.WNOHANG : 0);
          if (rc == 0) {
             continue;
          }
@@ -362,8 +377,8 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
 
    private void handleExit(final LinuxProcess process, int status)
    {
-      if (WIFEXITED(status)) {
-         status = WEXITSTATUS(status);
+      if (LibC.WIFEXITED(status)) {
+         status = LibC.WEXITSTATUS(status);
          if (status == 127) {
             process.onExit(Integer.MIN_VALUE);
          }
@@ -371,8 +386,11 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
             process.onExit(status);
          }
       }
-      else if (WIFSIGNALED(status)) {
-         process.onExit(WTERMSIG(status));
+      else if (LibC.WIFSIGNALED(status)) {
+         // Unix shells return 0x80 + signal number for processes that are terminated by a signal
+         // to allow callers to distinguish between signals and exit codes
+         // See https://github.com/JetBrains/jdk8u_jdk/blob/master/src/solaris/native/java/lang/UNIXProcess_md.c#L266
+         process.onExit(0x80 + LibC.WTERMSIG(status));
       }
       else {
          process.onExit(Integer.MIN_VALUE);
@@ -397,13 +415,19 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
     * This loop will wait up to the {@link #LINGER_TIME_MS configured linger timeout} for the process to
     * terminate. At that point, if the process still hasn't terminated, it is abandoned.
     */
-   private void waitForDeadPool()
+   private void pollForDeadPool()
    {
       long sleepInterval = 0L;
-      long timeout = System.currentTimeMillis() + LINGER_TIME_MS;
+      long start = System.currentTimeMillis();
+      long timeout = start + LINGER_TIME_MS;
       while (true) {
-         checkDeadPool();
-         if (deadPool.isEmpty() || System.currentTimeMillis() > timeout) {
+         checkDeadPool(true);
+         if (deadPool.isEmpty()) {
+            LOGGER.debug("Drained the deadpool in {}ms", System.currentTimeMillis() - start);
+            break;
+         }
+         else if (System.currentTimeMillis() > timeout) {
+            LOGGER.warn("Abandoned draining the deadpool after {}ms", System.currentTimeMillis() - start);
             break;
          }
 
@@ -418,6 +442,33 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
          }
          // 0 -> 1 -> 3 -> 7 -> 15 -> 31 -> 63 -> 127, etc
          sleepInterval = (sleepInterval * 2L) + 1L;
+      }
+   }
+
+   /**
+    * Uses an <i>unbounded</i> {@code waitpid} (i.e. {@code waitpid} without {@code WNOHANG}) to wait for the
+    * {@link #deadPool} to empty. This ensures the deadpool is always drained and every process is reaped, but
+    * risks misbehaving processes blocking this thread indefinitely if they don't exit.
+    */
+   private void waitForDeadPool()
+   {
+      long start = System.currentTimeMillis();
+      checkDeadPool(false);
+      long duration = System.currentTimeMillis() - start;
+
+      // Without WNOHANG, waitpid should either return -1 (failure) or some positive value to indicate
+      // the child has exited. Either way, the deadpool should always be empty after a single pass
+      if (deadPool.isEmpty()) {
+         if (duration > LINGER_TIME_MS) {
+            LOGGER.warn("Reaped the deadpool in {}ms", duration);
+         }
+         else {
+            LOGGER.debug("Reaped the deadpool in {}ms", duration);
+         }
+      }
+      else {
+         // This shouldn't be possible, but just in case it happens we log so we can detect it
+         LOGGER.warn("After {}ms reaping, the deadpool still has {} process(es)", duration, deadPool.size());
       }
    }
 }
