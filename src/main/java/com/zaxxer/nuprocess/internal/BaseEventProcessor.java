@@ -23,6 +23,8 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.sun.jna.ptr.IntByReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Brett Wooldridge
@@ -33,15 +35,18 @@ public abstract class BaseEventProcessor<T extends BasePosixProcess> implements 
 
    protected static final int DEADPOOL_POLL_INTERVAL;
    protected static final int LINGER_ITERATIONS;
-   private final int lingerIterations;
+
+   protected final Logger logger;
 
    protected Map<Integer, T> pidToProcessMap;
    protected Map<Integer, T> fildesToProcessMap;
 
    protected volatile boolean shutdown;
 
+   private final AtomicBoolean isRunning;
+   private final int lingerIterations;
+
    private CyclicBarrier startBarrier;
-   private AtomicBoolean isRunning;
 
    static {
       LINGER_TIME_MS = Math.max(1000, Integer.getInteger("com.zaxxer.nuprocess.lingerTimeMs", 2500));
@@ -51,17 +56,14 @@ public abstract class BaseEventProcessor<T extends BasePosixProcess> implements 
       LINGER_ITERATIONS = LINGER_TIME_MS / DEADPOOL_POLL_INTERVAL;
    }
 
-   public BaseEventProcessor()
-   {
-      this(LINGER_ITERATIONS);
-   }
-
    public BaseEventProcessor(int lingerIterations)
    {
       this.lingerIterations = lingerIterations;
-      pidToProcessMap = new ConcurrentHashMap<Integer, T>();
-      fildesToProcessMap = new ConcurrentHashMap<Integer, T>();
+
+      fildesToProcessMap = new ConcurrentHashMap<>();
       isRunning = new AtomicBoolean();
+      logger = LoggerFactory.getLogger(getClass());
+      pidToProcessMap = new ConcurrentHashMap<>();
    }
 
    /**
@@ -80,9 +82,17 @@ public abstract class BaseEventProcessor<T extends BasePosixProcess> implements 
          while (!isRunning.compareAndSet(idleCount > lingerIterations && pidToProcessMap.isEmpty(), false)) {
             idleCount = (!shutdown && process()) ? 0 : (idleCount + 1);
          }
+
+         if (shutdown) {
+            logger.debug("Processing has been shut down ({} processes killed)", pidToProcessMap.size());
+         }
+         else {
+            logger.debug("No processes left to pump");
+         }
       }
       catch (Exception e) {
-         // TODO: how to handle this error?
+         logger.warn("Abandoning processing loop after unexpected exception ({} processes pending)",
+                 pidToProcessMap.size(), e);
          isRunning.set(false);
       }
       finally {
