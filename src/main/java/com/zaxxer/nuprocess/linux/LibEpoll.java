@@ -45,8 +45,6 @@ public class LibEpoll
    // EpollEvent.getPointer() of the first array element could then be passed to this API.
    public static native int epoll_wait(int epfd, Pointer events, int maxevents, int timeout);
 
-   public static final int SIGPIPE = 13;
-
    /* from /usr/include/sys/epoll.h */
    public static final int EPOLL_CTL_ADD = 1; /* Add a file descriptor to the interface.  */
    public static final int EPOLL_CTL_DEL = 2; /* Remove a file descriptor from the interface.  */
