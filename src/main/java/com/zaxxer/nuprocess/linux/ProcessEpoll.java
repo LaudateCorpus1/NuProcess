@@ -233,7 +233,17 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
       try {
          int nev = LibEpoll.epoll_wait(epoll, triggeredEvent.getPointer(), 1, DEADPOOL_POLL_INTERVAL);
          if (nev == -1) {
-            throw new RuntimeException("Error waiting for epoll (" + Native.getLastError() + ")");
+            int errno = Native.getLastError();
+            if (errno == LibC.EINTR) {
+               // epoll_wait is not restarted, regardless of SA_RESTART, if it's interrupted by a
+               // signal. To prevent leaking processes, return true to indicate processing is not
+               // idle and ensure the run() loop calls process again
+               logger.debug("Interrupted in epoll_wait; retrying");
+               return true;
+            }
+
+            // For any other error, throw an exception and include errno to facilitate debugging
+            throw new RuntimeException("Error waiting for epoll (" + errno + ")");
          }
 
          if (nev == 0) {
