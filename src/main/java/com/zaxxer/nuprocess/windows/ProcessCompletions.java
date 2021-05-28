@@ -27,8 +27,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.sun.jna.Native;
 import com.sun.jna.ptr.IntByReference;
@@ -38,12 +36,14 @@ import com.zaxxer.nuprocess.windows.NuWinNT.HANDLE;
 import com.zaxxer.nuprocess.windows.NuWinNT.ULONG_PTR;
 import com.zaxxer.nuprocess.windows.NuWinNT.ULONG_PTRByReference;
 import com.zaxxer.nuprocess.windows.WindowsProcess.PipeBundle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class ProcessCompletions implements Runnable
 {
    private static final int DEADPOOL_POLL_INTERVAL;
    private static final int LINGER_ITERATIONS;
-   private static final Logger LOGGER = Logger.getLogger(ProcessCompletions.class.getCanonicalName());
+   private static final Logger LOGGER = LoggerFactory.getLogger(ProcessCompletions.class);
    private static final int STDOUT = 0;
    private static final int STDERR = 1;
 
@@ -124,9 +124,8 @@ public final class ProcessCompletions implements Runnable
          }
       }
       catch (Exception e) {
-         // TODO: how to handle this error?
-         LOGGER.log(Level.WARNING, "Aborting processing loop after unexpected exception (" +
-                 completionKeyToProcessMap.size() + " processes running)", e);
+         LOGGER.warn("Aborting processing loop after unexpected exception ({} keys registered)",
+                 completionKeyToProcessMap.size(), e);
          isRunning.set(false);
       }
       finally {
