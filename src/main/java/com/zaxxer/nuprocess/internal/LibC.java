@@ -106,6 +106,7 @@ public class LibC
 
    // From /usr/include/sys/signal.h
    public static final int SIGKILL = 9;
+   public static final int SIGPIPE = 13;
    public static final int SIGTERM = 15;
    public static final int SIGCONT = 19;
    public static final int SIGUSR2 = 31;

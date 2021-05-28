@@ -20,6 +20,8 @@ import com.sun.jna.Memory;
 import com.sun.jna.Native;
 import com.zaxxer.nuprocess.NuProcess;
 import com.zaxxer.nuprocess.NuProcessHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -33,8 +35,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import static com.zaxxer.nuprocess.internal.Constants.NUMBER_OF_THREADS;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
@@ -42,7 +42,7 @@ import static java.util.concurrent.locks.LockSupport.parkNanos;
 @SuppressWarnings("WeakerAccess")
 public abstract class BasePosixProcess implements NuProcess
 {
-   protected static final Logger LOGGER = Logger.getLogger(BasePosixProcess.class.getCanonicalName());
+   protected static final Logger LOGGER = LoggerFactory.getLogger(BasePosixProcess.class);
 
    private static final boolean IS_SOFTEXIT_DETECTION;
    private static final ByteBuffer STDIN_CLOSED_PENDING_WRITE_TOMBSTONE = ByteBuffer.allocate(1);
@@ -309,7 +309,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       finally {
          exitPending.countDown();
@@ -354,7 +354,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       if (!outBuffer.hasRemaining()) {
          // The caller's onStdout() callback must set the buffer's position
@@ -392,7 +392,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       if (!errBuffer.hasRemaining()) {
          // The caller's onStderr() callback must set the buffer's position
@@ -489,7 +489,7 @@ public abstract class BasePosixProcess implements NuProcess
          return true;
       }
       catch (Exception e) {
-         LOGGER.log(Level.SEVERE, "Exception thrown handling writes to stdin " + processHandler, e);
+         LOGGER.warn("Exception thrown handling writes to stdin " + processHandler, e);
 
          // Don't let an exception thrown from the user's handler interrupt us
          return false;
@@ -565,7 +565,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
    }
 
@@ -576,7 +576,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
    }
 
@@ -607,7 +607,7 @@ public abstract class BasePosixProcess implements NuProcess
          return new int[] {in[1], out[0], err[0]};
       }
       catch (RuntimeException e) {
-         LOGGER.log(Level.SEVERE, "Error creating pipes", e);
+         LOGGER.error("Error creating pipes", e);
          initFailureCleanup(in, out, err);
          throw e;
       }

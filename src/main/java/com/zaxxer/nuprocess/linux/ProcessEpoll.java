@@ -28,11 +28,6 @@ import com.zaxxer.nuprocess.NuProcess;
 import com.zaxxer.nuprocess.internal.BaseEventProcessor;
 import com.zaxxer.nuprocess.internal.LibC;
 
-import static com.zaxxer.nuprocess.internal.LibC.WIFEXITED;
-import static com.zaxxer.nuprocess.internal.LibC.WEXITSTATUS;
-import static com.zaxxer.nuprocess.internal.LibC.WIFSIGNALED;
-import static com.zaxxer.nuprocess.internal.LibC.WTERMSIG;
-
 /**
  * @author Brett Wooldridge
  */
@@ -41,9 +36,10 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
    private static final int EVENT_POOL_SIZE = 64;
    private static final BlockingQueue<EpollEvent> eventPool;
 
-   private int epoll;
-   private EpollEvent triggeredEvent;
-   private List<LinuxProcess> deadPool;
+   private final int epoll;
+   private final EpollEvent triggeredEvent;
+   private final List<LinuxProcess> deadPool;
+
    private LinuxProcess process;
 
    static
@@ -79,9 +75,8 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
          throw new RuntimeException("Unable to create kqueue: " + Native.getLastError());
       }
 
-      triggeredEvent = new EpollEvent();
-
       deadPool = new LinkedList<>();
+      triggeredEvent = new EpollEvent();
    }
 
    // ************************************************************************
@@ -132,7 +127,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
             eventPool.put(event);
          }
          catch (InterruptedException ie) {
-            throw new RuntimeException(ie);
+            throw new RuntimeException("Interrupted while registering " + process.getPid(), ie);
          }
       }
       finally {
@@ -175,7 +170,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
          }
       }
       catch (InterruptedException ie) {
-         throw new RuntimeException(ie);
+         throw new RuntimeException("Interrupted while queuing " + process.getPid() + " for stdin", ie);
       }
       finally {
          process.getStdin().release();
@@ -190,7 +185,12 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
       if (process != null) {
          // For synchronous execution, wait until the deadpool is drained. This is necessary to ensure
          // the handler's onExit is called before LinuxProcess.run returns.
-         waitForDeadPool();
+         if (deadPool.isEmpty()) {
+            logger.debug("{}: The deadpool is already empty", process.getPid());
+         }
+         else {
+            waitForDeadPool();
+         }
       }
    }
 
@@ -335,10 +335,13 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
       int rc = LibC.waitpid(linuxProcess.getPid(), ret, LibC.WNOHANG);
 
       if (rc == 0) {
+         logger.debug("{}: Added to deadpool", linuxProcess.getPid());
          deadPool.add(linuxProcess);
       }
       else if (rc < 0) {
-         linuxProcess.onExit((Native.getLastError() == LibC.ECHILD) ? Integer.MAX_VALUE : Integer.MIN_VALUE);
+         int errno = Native.getLastError();
+         logger.debug("{}: waitpid returned {} (Last error: {})", linuxProcess.getPid(), rc, errno);
+         linuxProcess.onExit((errno == LibC.ECHILD) ? Integer.MAX_VALUE : Integer.MIN_VALUE);
       }
       else {
          handleExit(linuxProcess, ret.getValue());
@@ -362,31 +365,33 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
 
          iterator.remove();
          if (rc < 0) {
-            process.onExit((Native.getLastError() == LibC.ECHILD) ? Integer.MAX_VALUE : Integer.MIN_VALUE);
-            continue;
+            int errno = Native.getLastError();
+            logger.debug("{}: waitpid returned {} (Last error: {})", process.getPid(), rc, errno);
+            process.onExit((errno == LibC.ECHILD) ? Integer.MAX_VALUE : Integer.MIN_VALUE);
          }
-
-         handleExit(process, ret.getValue());
+         else {
+            handleExit(process, ret.getValue());
+         }
       }
    }
 
    private void handleExit(final LinuxProcess process, int status)
    {
-      if (WIFEXITED(status)) {
-         status = WEXITSTATUS(status);
-         if (status == 127) {
-            process.onExit(Integer.MIN_VALUE);
-         }
-         else {
-            process.onExit(status);
-         }
+      if (LibC.WIFEXITED(status)) {
+         // The child exited normally. This will return its exit code
+         status = LibC.WEXITSTATUS(status);
       }
-      else if (WIFSIGNALED(status)) {
-         process.onExit(WTERMSIG(status));
+      else if (LibC.WIFSIGNALED(status)) {
+         // Unix shells return 0x80 + signal number for processes that are terminated by a signal
+         // to allow callers to distinguish between signals and exit codes
+         // See https://github.com/JetBrains/jdk8u_jdk/blob/master/src/solaris/native/java/lang/UNIXProcess_md.c#L266
+         status = 0x80 + LibC.WTERMSIG(status);
       }
-      else {
-         process.onExit(Integer.MIN_VALUE);
-      }
+
+      // If neither macro above understands the status code, we pass it through unchanged. This
+      // matches what the JDK's process code would do
+      logger.debug("{}: Process has exited {}", process.getPid(), status);
+      process.onExit(status);
    }
 
    /**
@@ -410,10 +415,16 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
    private void waitForDeadPool()
    {
       long sleepInterval = 0L;
-      long timeout = System.currentTimeMillis() + LINGER_TIME_MS;
+      long start = System.currentTimeMillis();
+      long timeout = start + LINGER_TIME_MS;
       while (true) {
          checkDeadPool();
-         if (deadPool.isEmpty() || System.currentTimeMillis() > timeout) {
+         if (deadPool.isEmpty()) {
+            logger.debug("Drained the deadpool in {}ms", System.currentTimeMillis() - start);
+            break;
+         }
+         else if (System.currentTimeMillis() > timeout) {
+            logger.warn("Abandoned draining the deadpool after {}ms", System.currentTimeMillis() - start);
             break;
          }
 
@@ -422,6 +433,7 @@ class ProcessEpoll extends BaseEventProcessor<LinuxProcess>
                Thread.sleep(sleepInterval);
             }
             catch (InterruptedException e) {
+               logger.debug("Interrupted with {} processes still in the deadpool", deadPool.size());
                Thread.currentThread().interrupt();
                break;
             }

@@ -23,6 +23,8 @@ import com.zaxxer.nuprocess.NuProcess;
 import com.zaxxer.nuprocess.NuProcessHandler;
 import com.zaxxer.nuprocess.windows.NuKernel32.OVERLAPPED;
 import com.zaxxer.nuprocess.windows.NuWinNT.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
@@ -33,8 +35,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import static com.zaxxer.nuprocess.internal.Constants.NUMBER_OF_THREADS;
 
@@ -48,7 +48,7 @@ public final class WindowsProcess implements NuProcess
    // See https://github.com/JetBrains/jdk8u_jdk/blob/master/src/windows/native/java/lang/ProcessImpl_md.c#L36-L41
    private static final int BUFFER_SIZE = 4096 + 24;
    private static final String ENV_SYSTEMROOT = "SystemRoot";
-   private static final Logger LOGGER = Logger.getLogger(WindowsProcess.class.getCanonicalName());
+   private static final Logger LOGGER = LoggerFactory.getLogger(WindowsProcess.class);
 
    private static final ProcessCompletions[] processors;
    private static int processorRoundRobin;
@@ -238,7 +238,7 @@ public final class WindowsProcess implements NuProcess
          NuKernel32.ResumeThread(processInfo.hThread);
       }
       catch (Throwable e) {
-         LOGGER.log(Level.WARNING, "Failed to start process", e);
+         LOGGER.warn("Failed to start process", e);
          onExit(Integer.MIN_VALUE);
       }
       finally {
@@ -264,7 +264,7 @@ public final class WindowsProcess implements NuProcess
          NuKernel32.ResumeThread(processInfo.hThread);
       }
       catch (Throwable e) {
-         LOGGER.log(Level.WARNING, "Failed to start process", e);
+         LOGGER.warn("Failed to start process", e);
          onExit(Integer.MIN_VALUE);
          return;
       }
@@ -284,7 +284,7 @@ public final class WindowsProcess implements NuProcess
       createPipes();
 
       char[] block = getEnvironment(environment);
-      Memory env = new Memory(block.length * 3);
+      Memory env = new Memory(block.length * 3L);
       env.write(0, block, 0, block.length);
 
       STARTUPINFO startupInfo = new STARTUPINFO();
@@ -353,7 +353,7 @@ public final class WindowsProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       if (!stdoutPipe.buffer.hasRemaining()) {
          // The caller's onStdout() callback must set the buffer's position
@@ -388,7 +388,7 @@ public final class WindowsProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       if (!stderrPipe.buffer.hasRemaining()) {
          // The caller's onStdout() callback must set the buffer's position
@@ -457,7 +457,7 @@ public final class WindowsProcess implements NuProcess
          return true;
       }
       catch (Exception e) {
-         LOGGER.log(Level.SEVERE, "Exception thrown handling writes to stdin " + processHandler, e);
+         LOGGER.warn("Exception thrown handling writes to stdin " + processHandler, e);
 
          // Don't let an exception thrown from the user's handler interrupt us
          return false;
@@ -487,7 +487,7 @@ public final class WindowsProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
       finally {
          exitPending.countDown();
@@ -542,7 +542,7 @@ public final class WindowsProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
    }
 
@@ -553,7 +553,7 @@ public final class WindowsProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
       }
    }
 
@@ -624,7 +624,7 @@ public final class WindowsProcess implements NuProcess
 
    private void registerProcess()
    {
-      int mySlot = 0;
+      int mySlot;
       synchronized (processors) {
          mySlot = processorRoundRobin;
          processorRoundRobin = (processorRoundRobin + 1) % processors.length;
@@ -671,7 +671,7 @@ public final class WindowsProcess implements NuProcess
 
    private char[] getEnvironment(String[] environment)
    {
-      Map<String, String> env = new HashMap<String, String>();
+      Map<String, String> env = new HashMap<>();
 
       // This SystemRoot handling matches java.lang.ProcessEnvironment.toEnvironmentBlock,
       // which is used by ProcessBuilder when starting processes on Windows
@@ -706,7 +706,7 @@ public final class WindowsProcess implements NuProcess
    private String getEnvironmentBlock(Map<String, String> env)
    {
       // Sort by name using UPPERCASE collation
-      List<Map.Entry<String, String>> list = new ArrayList<Map.Entry<String, String>>(env.entrySet());
+      List<Map.Entry<String, String>> list = new ArrayList<>(env.entrySet());
       Collections.sort(list, new EntryComparator());
 
       StringBuilder sb = new StringBuilder(32 * env.size());

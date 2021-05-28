@@ -30,7 +30,6 @@ import com.zaxxer.nuprocess.internal.LibC.SyscallLibrary;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.logging.Level;
 
 /**
  * @author Brett Wooldridge
@@ -73,7 +72,7 @@ class OsxProcess extends BasePosixProcess
       }
       catch (RuntimeException e) {
          // TODO remove from event processor pid map?
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
          onExit(Integer.MIN_VALUE);
          return null;
       }
@@ -114,7 +113,7 @@ class OsxProcess extends BasePosixProcess
       }
       catch (RuntimeException e) {
          // TODO remove from event processor pid map?
-         LOGGER.log(Level.WARNING, "Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from handler", e);
          onExit(Integer.MIN_VALUE);
       }
       finally {
@@ -227,7 +226,7 @@ class OsxProcess extends BasePosixProcess
          return posix_spawn_file_actions;
       }
       catch (RuntimeException e) {
-         LOGGER.log(Level.WARNING, "Exception creating posix pipe actions", e);
+         LOGGER.warn("Exception creating posix pipe actions", e);
          LibC.posix_spawn_file_actions_destroy(posix_spawn_file_actions);
          throw e;
       }

@@ -26,7 +26,6 @@ import com.zaxxer.nuprocess.internal.LibC;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.logging.Level;
 
 import static com.zaxxer.nuprocess.internal.Constants.JVM_MAJOR_VERSION;
 
@@ -36,7 +35,7 @@ import static com.zaxxer.nuprocess.internal.Constants.JVM_MAJOR_VERSION;
 public class LinuxProcess extends BasePosixProcess
 {
    static {
-      LibEpoll.sigignore(LibEpoll.SIGPIPE);
+      LibEpoll.sigignore(LibC.SIGPIPE);
 
       // TODO: install signal handler for SIGCHLD, and call onExit() when received, call the default (JVM) hook if the PID is not ours
 
@@ -77,7 +76,7 @@ public class LinuxProcess extends BasePosixProcess
       }
       catch (Exception e) {
          // TODO remove from event processor pid map?
-         LOGGER.log(Level.WARNING, "Failed to start process", e);
+         LOGGER.warn("Failed to start process", e);
          onExit(Integer.MIN_VALUE);
          return null;
       }
@@ -107,7 +106,7 @@ public class LinuxProcess extends BasePosixProcess
          myProcessor.run();
       }
       catch (Exception e) {
-         LOGGER.log(Level.WARNING, "Failed to start process", e);
+         LOGGER.warn("Failed to start process", e);
          onExit(Integer.MIN_VALUE);
       }
    }
