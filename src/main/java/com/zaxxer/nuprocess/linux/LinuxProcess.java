@@ -34,6 +34,8 @@ import static com.zaxxer.nuprocess.internal.Constants.JVM_MAJOR_VERSION;
  */
 public class LinuxProcess extends BasePosixProcess
 {
+   private final EpollEvent epollEvent;
+
    static {
       LibEpoll.sigignore(LibC.SIGPIPE);
 
@@ -54,6 +56,8 @@ public class LinuxProcess extends BasePosixProcess
 
    LinuxProcess(NuProcessHandler processListener) {
       super(processListener);
+
+      epollEvent = new EpollEvent();
    }
 
    @Override
@@ -109,6 +113,10 @@ public class LinuxProcess extends BasePosixProcess
          LOGGER.warn("Failed to start process", e);
          onExit(Integer.MIN_VALUE);
       }
+   }
+
+   EpollEvent getEpollEvent() {
+      return epollEvent;
    }
 
    private void prepareProcess(List<String> command, String[] environment, Path cwd) throws IOException
