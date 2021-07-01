@@ -164,7 +164,15 @@ public abstract class BasePosixProcess implements NuProcess
    public void destroy(boolean force)
    {
       if (isRunning) {
-         checkReturnCode(LibC.kill(pid, force ? LibC.SIGKILL : LibC.SIGTERM), "Sending signal failed");
+         int result = LibC.kill(pid, force ? LibC.SIGKILL : LibC.SIGTERM);
+         if (result != 0) {
+            int errno = Native.getLastError();
+            if (errno == LibC.ESRCH) {
+               LOGGER.debug("{}: The process exited before it could be {}", pid, force ? "killed" : "terminated");
+            } else {
+               throw new RuntimeException("Sending signal failed, return code: " + result + ", last error: " + errno);
+            }
+         }
       }
    }
 
@@ -309,7 +317,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.warn("Exception thrown from handler", e);
+         LOGGER.warn("{}: Exception thrown during exit", pid, e);
       }
       finally {
          exitPending.countDown();
@@ -354,7 +362,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.warn("Exception thrown from handler", e);
+         LOGGER.warn("{}: Exception thrown from onStdout", pid, e);
       }
       if (!outBuffer.hasRemaining()) {
          // The caller's onStdout() callback must set the buffer's position
@@ -392,7 +400,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.warn("Exception thrown from handler", e);
+         LOGGER.warn("{}: Exception thrown from onStderr", pid, e);
       }
       if (!errBuffer.hasRemaining()) {
          // The caller's onStderr() callback must set the buffer's position
@@ -489,7 +497,7 @@ public abstract class BasePosixProcess implements NuProcess
          return true;
       }
       catch (Exception e) {
-         LOGGER.warn("Exception thrown handling writes to stdin " + processHandler, e);
+         LOGGER.warn("{}: Exception thrown from onStdinReady", pid, e);
 
          // Don't let an exception thrown from the user's handler interrupt us
          return false;
@@ -565,7 +573,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.warn("Exception thrown from handler", e);
+         LOGGER.warn("Exception thrown from onPreStart", e);
       }
    }
 
@@ -576,7 +584,7 @@ public abstract class BasePosixProcess implements NuProcess
       }
       catch (Exception e) {
          // Don't let an exception thrown from the user's handler interrupt us
-         LOGGER.warn("Exception thrown from handler", e);
+         LOGGER.warn("{}: Exception thrown from onStart", pid, e);
       }
    }
 
@@ -607,7 +615,7 @@ public abstract class BasePosixProcess implements NuProcess
          return new int[] {in[1], out[0], err[0]};
       }
       catch (RuntimeException e) {
-         LOGGER.error("Error creating pipes", e);
+         LOGGER.error("Error creating pipes, last error: {}", Native.getLastError(), e);
          initFailureCleanup(in, out, err);
          throw e;
       }
